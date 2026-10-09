@@ -71,7 +71,7 @@ wayland = [
 # No-op, kept so that the implicit feature of the former optional `ahash` dependency still exists.
 ahash = []
 wayland-dlopen = ["wayland-backend/dlopen"]
-wayland-csd-adwaita = ["sctk-adwaita", "sctk-adwaita/ab_glyph"]
+wayland-csd-adwaita = ["sctk-adwaita", "sctk-adwaita/skrifa"]
 wayland-csd-adwaita-crossfont = ["sctk-adwaita", "sctk-adwaita/crossfont"]
 wayland-csd-adwaita-notitle = ["sctk-adwaita"]
 android-native-activity = ["android-activity/native-activity"]
@@ -285,7 +285,7 @@ rustix = { version = "1.1.5", default-features = false, features = [
 sctk = { package = "smithay-client-toolkit", version = "0.20.0", default-features = false, features = [
     "calloop",
 ], optional = true }
-sctk-adwaita = { version = "0.11.0", default-features = false, optional = true }
+sctk-adwaita = { version = "0.11.1", default-features = false, optional = true }
 wayland-backend = { version = "0.3.10", default-features = false, features = [
     "client_system",
 ], optional = true }
