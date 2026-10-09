@@ -4,11 +4,13 @@ use std::rc::Weak;
 use std::time::Instant;
 
 use objc2::rc::Retained;
-use objc2::{declare_class, msg_send_id, mutability, ClassType, DeclaredClass};
+use objc2::{
+    define_class, msg_send, ClassType, DefinedClass, MainThreadMarker, MainThreadOnly, Message,
+};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSApplicationDelegate, NSRunningApplication,
 };
-use objc2_foundation::{MainThreadMarker, NSNotification, NSObject, NSObjectProtocol};
+use objc2_foundation::{NSNotification, NSObject, NSObjectProtocol};
 
 use super::event_handler::EventHandler;
 use super::event_loop::{notify_windows_of_exit, stop_app_immediately, ActiveEventLoop, PanicInfo};
@@ -44,29 +46,23 @@ pub(super) struct AppState {
     // as such should be careful to not add fields that, in turn, strongly reference those.
 }
 
-declare_class!(
+define_class!(
+    #[unsafe(super(NSObject))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "WinitApplicationDelegate"]
+    #[ivars = AppState]
     #[derive(Debug)]
     pub(super) struct ApplicationDelegate;
-
-    unsafe impl ClassType for ApplicationDelegate {
-        type Super = NSObject;
-        type Mutability = mutability::MainThreadOnly;
-        const NAME: &'static str = "WinitApplicationDelegate";
-    }
-
-    impl DeclaredClass for ApplicationDelegate {
-        type Ivars = AppState;
-    }
 
     unsafe impl NSObjectProtocol for ApplicationDelegate {}
 
     unsafe impl NSApplicationDelegate for ApplicationDelegate {
-        #[method(applicationDidFinishLaunching:)]
+        #[unsafe(method(applicationDidFinishLaunching:))]
         fn app_did_finish_launching(&self, notification: &NSNotification) {
             self.did_finish_launching(notification)
         }
 
-        #[method(applicationWillTerminate:)]
+        #[unsafe(method(applicationWillTerminate:))]
         fn app_will_terminate(&self, notification: &NSNotification) {
             self.will_terminate(notification)
         }
@@ -99,7 +95,7 @@ impl ApplicationDelegate {
             wait_timeout: Cell::new(None),
             pending_redraw: RefCell::new(vec![]),
         });
-        unsafe { msg_send_id![super(this), init] }
+        unsafe { msg_send![super(this), init] }
     }
 
     // NOTE: This will, globally, only be run once, no matter how many
@@ -126,7 +122,7 @@ impl ApplicationDelegate {
             // - https://github.com/rust-windowing/winit/issues/261
             // - https://github.com/rust-windowing/winit/issues/3958
             let is_bundled =
-                unsafe { NSRunningApplication::currentApplication().bundleIdentifier().is_some() };
+                NSRunningApplication::currentApplication().bundleIdentifier().is_some();
             if !is_bundled {
                 app.setActivationPolicy(NSApplicationActivationPolicy::Regular);
             }
@@ -173,11 +169,10 @@ impl ApplicationDelegate {
 
     pub fn get(mtm: MainThreadMarker) -> Retained<Self> {
         let app = NSApplication::sharedApplication(mtm);
-        let delegate =
-            unsafe { app.delegate() }.expect("a delegate was not configured on the application");
-        if delegate.is_kind_of::<Self>() {
+        let delegate = app.delegate().expect("a delegate was not configured on the application");
+        if delegate.isKindOfClass(Self::class()) {
             // SAFETY: Just checked that the delegate is an instance of `ApplicationDelegate`
-            unsafe { Retained::cast(delegate) }
+            unsafe { Retained::cast_unchecked(delegate) }
         } else {
             panic!("tried to get a delegate that was not the one Winit has registered")
         }

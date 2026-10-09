@@ -37,6 +37,8 @@ impl DeviceId {
     }
 }
 
+pub(crate) use objc2_core_foundation::CGFloat;
+
 pub(crate) const DEVICE_ID: RootDeviceId = RootDeviceId(DeviceId);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

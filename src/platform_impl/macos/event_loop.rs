@@ -16,9 +16,9 @@ use core_foundation::runloop::{
 };
 use objc2::rc::{autoreleasepool, Retained};
 use objc2::runtime::ProtocolObject;
-use objc2::sel;
+use objc2::{sel, MainThreadMarker};
 use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSWindow};
-use objc2_foundation::{MainThreadMarker, NSObjectProtocol};
+use objc2_foundation::NSObjectProtocol;
 
 use super::app::override_send_event;
 use super::app_state::{ApplicationDelegate, HandlePendingUserEvents};
@@ -295,8 +295,7 @@ impl<T> EventLoop<T> {
                     self.delegate.dispatch_init_events();
                 }
 
-                // SAFETY: We do not run the application re-entrantly
-                unsafe { self.app.run() };
+                self.app.run();
 
                 // While the app is running it's possible that we catch a panic
                 // to avoid unwinding across an objective-c ffi boundary, which
@@ -328,8 +327,7 @@ impl<T> EventLoop<T> {
                     debug_assert!(!self.delegate.is_running());
 
                     self.delegate.set_stop_on_launch();
-                    // SAFETY: We do not run the application re-entrantly
-                    unsafe { self.app.run() };
+                    self.app.run();
 
                     // Note: we dispatch `NewEvents(Init)` + `Resumed` events after the application
                     // has launched
@@ -361,8 +359,7 @@ impl<T> EventLoop<T> {
                         },
                     }
                     self.delegate.set_stop_on_redraw(true);
-                    // SAFETY: We do not run the application re-entrantly
-                    unsafe { self.app.run() };
+                    self.app.run();
                 }
 
                 // While the app is running it's possible that we catch a panic

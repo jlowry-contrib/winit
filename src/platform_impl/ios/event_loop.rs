@@ -12,14 +12,15 @@ use core_foundation::runloop::{
     CFRunLoopSourceInvalidate, CFRunLoopSourceRef, CFRunLoopSourceSignal, CFRunLoopWakeUp,
 };
 use objc2::rc::Retained;
-use objc2::{msg_send_id, ClassType};
-use objc2_foundation::{MainThreadMarker, NSNotificationCenter, NSObject};
+use objc2::runtime::ProtocolObject;
+use objc2::{msg_send, ClassType, MainThreadMarker};
+use objc2_foundation::{NSNotificationCenter, NSObjectProtocol};
 use objc2_ui_kit::{
     UIApplication, UIApplicationDidBecomeActiveNotification,
     UIApplicationDidEnterBackgroundNotification, UIApplicationDidFinishLaunchingNotification,
-    UIApplicationDidReceiveMemoryWarningNotification, UIApplicationMain,
-    UIApplicationWillEnterForegroundNotification, UIApplicationWillResignActiveNotification,
-    UIApplicationWillTerminateNotification, UIDevice, UIScreen, UIUserInterfaceIdiom,
+    UIApplicationDidReceiveMemoryWarningNotification, UIApplicationWillEnterForegroundNotification,
+    UIApplicationWillResignActiveNotification, UIApplicationWillTerminateNotification, UIDevice,
+    UIScreen, UIUserInterfaceIdiom,
 };
 
 use crate::error::EventLoopError;
@@ -143,13 +144,13 @@ pub struct EventLoop<T: 'static> {
     // system instead cleans it up next time it would have posted a notification to it.
     //
     // Though we do still need to keep the observers around to prevent them from being deallocated.
-    _did_finish_launching_observer: Retained<NSObject>,
-    _did_become_active_observer: Retained<NSObject>,
-    _will_resign_active_observer: Retained<NSObject>,
-    _will_enter_foreground_observer: Retained<NSObject>,
-    _did_enter_background_observer: Retained<NSObject>,
-    _will_terminate_observer: Retained<NSObject>,
-    _did_receive_memory_warning_observer: Retained<NSObject>,
+    _did_finish_launching_observer: Retained<ProtocolObject<dyn NSObjectProtocol>>,
+    _did_become_active_observer: Retained<ProtocolObject<dyn NSObjectProtocol>>,
+    _will_resign_active_observer: Retained<ProtocolObject<dyn NSObjectProtocol>>,
+    _will_enter_foreground_observer: Retained<ProtocolObject<dyn NSObjectProtocol>>,
+    _did_enter_background_observer: Retained<ProtocolObject<dyn NSObjectProtocol>>,
+    _will_terminate_observer: Retained<ProtocolObject<dyn NSObjectProtocol>>,
+    _did_receive_memory_warning_observer: Retained<ProtocolObject<dyn NSObjectProtocol>>,
 }
 
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -176,7 +177,7 @@ impl<T: 'static> EventLoop<T> {
         // this line sets up the main run loop before `UIApplicationMain`
         setup_control_flow_observers();
 
-        let center = unsafe { NSNotificationCenter::defaultCenter() };
+        let center = NSNotificationCenter::defaultCenter();
 
         let _did_finish_launching_observer = create_observer(
             &center,
@@ -207,12 +208,12 @@ impl<T: 'static> EventLoop<T> {
             // `applicationWillEnterForeground:`
             unsafe { UIApplicationWillEnterForegroundNotification },
             move |notification| {
-                let app = unsafe { notification.object() }.expect(
+                let app = notification.object().expect(
                     "UIApplicationWillEnterForegroundNotification to have application object",
                 );
                 // SAFETY: The `object` in `UIApplicationWillEnterForegroundNotification` is
                 // documented to be `UIApplication`.
-                let app: Retained<UIApplication> = unsafe { Retained::cast(app) };
+                let app: Retained<UIApplication> = unsafe { Retained::cast_unchecked(app) };
                 send_occluded_event_for_all_windows(&app, false);
             },
         );
@@ -221,12 +222,12 @@ impl<T: 'static> EventLoop<T> {
             // `applicationDidEnterBackground:`
             unsafe { UIApplicationDidEnterBackgroundNotification },
             move |notification| {
-                let app = unsafe { notification.object() }.expect(
+                let app = notification.object().expect(
                     "UIApplicationDidEnterBackgroundNotification to have application object",
                 );
                 // SAFETY: The `object` in `UIApplicationDidEnterBackgroundNotification` is
                 // documented to be `UIApplication`.
-                let app: Retained<UIApplication> = unsafe { Retained::cast(app) };
+                let app: Retained<UIApplication> = unsafe { Retained::cast_unchecked(app) };
                 send_occluded_event_for_all_windows(&app, true);
             },
         );
@@ -235,11 +236,12 @@ impl<T: 'static> EventLoop<T> {
             // `applicationWillTerminate:`
             unsafe { UIApplicationWillTerminateNotification },
             move |notification| {
-                let app = unsafe { notification.object() }
+                let app = notification
+                    .object()
                     .expect("UIApplicationWillTerminateNotification to have application object");
                 // SAFETY: The `object` in `UIApplicationWillTerminateNotification` is
                 // (somewhat) documented to be `UIApplication`.
-                let app: Retained<UIApplication> = unsafe { Retained::cast(app) };
+                let app: Retained<UIApplication> = unsafe { Retained::cast_unchecked(app) };
                 app_state::terminated(&app);
             },
         );
@@ -275,7 +277,7 @@ impl<T: 'static> EventLoop<T> {
         F: FnMut(Event<T>, &RootActiveEventLoop),
     {
         let application: Option<Retained<UIApplication>> =
-            unsafe { msg_send_id![UIApplication::class(), sharedApplication] };
+            unsafe { msg_send![UIApplication::class(), sharedApplication] };
         assert!(
             application.is_none(),
             "\
@@ -302,8 +304,11 @@ impl<T: 'static> EventLoop<T> {
             fn _NSGetArgv() -> *mut *mut *mut c_char;
         }
 
+        // `UIApplicationMain` is deprecated in favour of `UIApplication::main`, which would also
+        // call `exit` if it ever returned; keep calling it directly to preserve behaviour.
+        #[allow(deprecated)]
         unsafe {
-            UIApplicationMain(
+            objc2_ui_kit::UIApplicationMain(
                 *_NSGetArgc(),
                 NonNull::new(*_NSGetArgv()).unwrap(),
                 // We intentionally override neither the application nor the delegate, to allow the
