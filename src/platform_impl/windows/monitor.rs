@@ -2,7 +2,8 @@ use std::collections::{BTreeSet, VecDeque};
 use std::hash::Hash;
 use std::{io, mem, ptr};
 
-use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, POINT, RECT};
+use windows_sys::core::BOOL;
+use windows_sys::Win32::Foundation::{HWND, LPARAM, POINT, RECT};
 use windows_sys::Win32::Graphics::Gdi::{
     EnumDisplayMonitors, EnumDisplaySettingsExW, GetMonitorInfoW, MonitorFromPoint,
     MonitorFromWindow, DEVMODEW, DM_BITSPERPEL, DM_DISPLAYFREQUENCY, DM_PELSHEIGHT, DM_PELSWIDTH,
@@ -76,8 +77,10 @@ impl VideoModeHandle {
     }
 }
 
+// The handle is stored as `isize` (the `HMONITOR` representation before windows-sys 0.59) so
+// that the derived `Debug`, `Ord` and `Hash` implementations stay the same.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
-pub struct MonitorHandle(HMONITOR);
+pub struct MonitorHandle(isize);
 
 // Send is not implemented for HMONITOR, we have to wrap it and implement it manually.
 // For more info see:
@@ -101,7 +104,7 @@ pub fn available_monitors() -> VecDeque<MonitorHandle> {
     let mut monitors: VecDeque<MonitorHandle> = VecDeque::new();
     unsafe {
         EnumDisplayMonitors(
-            0,
+            ptr::null_mut(),
             ptr::null(),
             Some(monitor_enum_proc),
             &mut monitors as *mut _ as LPARAM,
@@ -147,12 +150,12 @@ pub(crate) fn get_monitor_info(hmonitor: HMONITOR) -> Result<MONITORINFOEXW, io:
 
 impl MonitorHandle {
     pub(crate) fn new(hmonitor: HMONITOR) -> Self {
-        MonitorHandle(hmonitor)
+        MonitorHandle(hmonitor as isize)
     }
 
     #[inline]
     pub fn name(&self) -> Option<String> {
-        let monitor_info = get_monitor_info(self.0).unwrap();
+        let monitor_info = get_monitor_info(self.hmonitor()).unwrap();
         Some(decode_wide(&monitor_info.szDevice).to_string_lossy().to_string())
     }
 
@@ -163,12 +166,12 @@ impl MonitorHandle {
 
     #[inline]
     pub fn hmonitor(&self) -> HMONITOR {
-        self.0
+        self.0 as HMONITOR
     }
 
     #[inline]
     pub fn size(&self) -> PhysicalSize<u32> {
-        let rc_monitor = get_monitor_info(self.0).unwrap().monitorInfo.rcMonitor;
+        let rc_monitor = get_monitor_info(self.hmonitor()).unwrap().monitorInfo.rcMonitor;
         PhysicalSize {
             width: (rc_monitor.right - rc_monitor.left) as u32,
             height: (rc_monitor.bottom - rc_monitor.top) as u32,
@@ -177,7 +180,7 @@ impl MonitorHandle {
 
     #[inline]
     pub fn refresh_rate_millihertz(&self) -> Option<u32> {
-        let monitor_info = get_monitor_info(self.0).ok()?;
+        let monitor_info = get_monitor_info(self.hmonitor()).ok()?;
         let device_name = monitor_info.szDevice.as_ptr();
         unsafe {
             let mut mode: DEVMODEW = mem::zeroed();
@@ -194,7 +197,7 @@ impl MonitorHandle {
 
     #[inline]
     pub fn position(&self) -> PhysicalPosition<i32> {
-        get_monitor_info(self.0)
+        get_monitor_info(self.hmonitor())
             .map(|info| {
                 let rc_monitor = info.monitorInfo.rcMonitor;
                 PhysicalPosition { x: rc_monitor.left, y: rc_monitor.top }
@@ -204,7 +207,7 @@ impl MonitorHandle {
 
     #[inline]
     pub fn scale_factor(&self) -> f64 {
-        dpi_to_scale_factor(get_monitor_dpi(self.0).unwrap_or(96))
+        dpi_to_scale_factor(get_monitor_dpi(self.hmonitor()).unwrap_or(96))
     }
 
     #[inline]
@@ -215,7 +218,7 @@ impl MonitorHandle {
         let mut modes = BTreeSet::<RootVideoModeHandle>::new();
         let mod_map = |mode: RootVideoModeHandle| mode.video_mode;
 
-        let monitor_info = match get_monitor_info(self.0) {
+        let monitor_info = match get_monitor_info(self.hmonitor()) {
             Ok(monitor_info) => monitor_info,
             Err(error) => {
                 tracing::warn!("Error from get_monitor_info: {error}");

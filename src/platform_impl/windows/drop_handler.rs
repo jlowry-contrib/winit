@@ -4,16 +4,16 @@ use std::path::PathBuf;
 use std::ptr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use windows_sys::core::{IUnknown, GUID, HRESULT};
+use windows_sys::core::{GUID, HRESULT};
 use windows_sys::Win32::Foundation::{DV_E_FORMATETC, HWND, POINTL, S_OK};
-use windows_sys::Win32::System::Com::{IDataObject, DVASPECT_CONTENT, FORMATETC, TYMED_HGLOBAL};
+use windows_sys::Win32::System::Com::{DVASPECT_CONTENT, FORMATETC, TYMED_HGLOBAL};
 use windows_sys::Win32::System::Ole::{CF_HDROP, DROPEFFECT_COPY, DROPEFFECT_NONE};
 use windows_sys::Win32::UI::Shell::{DragFinish, DragQueryFileW, HDROP};
 
 use tracing::debug;
 
 use crate::platform_impl::platform::definitions::{
-    IDataObjectVtbl, IDropTarget, IDropTargetVtbl, IUnknownVtbl,
+    IDataObject, IDataObjectVtbl, IDropTarget, IDropTargetVtbl, IUnknown, IUnknownVtbl,
 };
 use crate::platform_impl::platform::WindowId;
 
@@ -88,7 +88,7 @@ impl FileDropHandler {
         let hdrop = unsafe {
             Self::iterate_filenames(pDataObj, |filename| {
                 drop_handler.send_event(Event::WindowEvent {
-                    window_id: RootWindowId(WindowId(drop_handler.window)),
+                    window_id: RootWindowId(WindowId(drop_handler.window as isize)),
                     event: HoveredFile(filename),
                 });
             })
@@ -122,7 +122,7 @@ impl FileDropHandler {
         let drop_handler = unsafe { Self::from_interface(this) };
         if drop_handler.hovered_is_valid {
             drop_handler.send_event(Event::WindowEvent {
-                window_id: RootWindowId(WindowId(drop_handler.window)),
+                window_id: RootWindowId(WindowId(drop_handler.window as isize)),
                 event: HoveredFileCancelled,
             });
         }
@@ -142,7 +142,7 @@ impl FileDropHandler {
         let hdrop = unsafe {
             Self::iterate_filenames(pDataObj, |filename| {
                 drop_handler.send_event(Event::WindowEvent {
-                    window_id: RootWindowId(WindowId(drop_handler.window)),
+                    window_id: RootWindowId(WindowId(drop_handler.window as isize)),
                     event: DroppedFile(filename),
                 });
             })

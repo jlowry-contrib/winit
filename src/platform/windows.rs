@@ -640,7 +640,7 @@ impl MonitorHandleExtWindows for MonitorHandle {
 
     #[inline]
     fn hmonitor(&self) -> HMONITOR {
-        self.inner.hmonitor()
+        self.inner.hmonitor() as HMONITOR
     }
 }
 

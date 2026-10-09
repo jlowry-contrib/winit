@@ -1,7 +1,7 @@
 use std::ffi::c_void;
 use std::path::Path;
 use std::sync::Arc;
-use std::{fmt, io, mem};
+use std::{fmt, io, mem, ptr};
 
 use cursor_icon::CursorIcon;
 use windows_sys::core::PCWSTR;
@@ -40,7 +40,7 @@ impl RgbaIcon {
         assert_eq!(and_mask.len(), pixel_count);
         let handle = unsafe {
             CreateIcon(
-                0,
+                ptr::null_mut(),
                 self.width as i32,
                 self.height as i32,
                 1,
@@ -49,7 +49,7 @@ impl RgbaIcon {
                 rgba.as_ptr(),
             )
         };
-        if handle != 0 {
+        if !handle.is_null() {
             Ok(WinIcon::from_handle(handle))
         } else {
             Err(BadIcon::OsError(io::Error::last_os_error()))
@@ -63,9 +63,11 @@ pub enum IconType {
     Big = ICON_BIG as isize,
 }
 
+// The handle is stored as `isize` (the `HICON` representation before windows-sys 0.59), which keeps
+// the type `Send + Sync` and its derived `Debug` output unchanged.
 #[derive(Debug)]
 struct RaiiIcon {
-    handle: HICON,
+    handle: isize,
 }
 
 #[derive(Clone)]
@@ -77,7 +79,7 @@ unsafe impl Send for WinIcon {}
 
 impl WinIcon {
     pub fn as_raw_handle(&self) -> HICON {
-        self.inner.handle
+        self.inner.handle as HICON
     }
 
     pub fn from_path<P: AsRef<Path>>(
@@ -91,7 +93,7 @@ impl WinIcon {
 
         let handle = unsafe {
             LoadImageW(
-                0,
+                ptr::null_mut(),
                 wide_path.as_ptr(),
                 IMAGE_ICON,
                 width,
@@ -99,7 +101,7 @@ impl WinIcon {
                 LR_DEFAULTSIZE | LR_LOADFROMFILE,
             )
         };
-        if handle != 0 {
+        if !handle.is_null() {
             Ok(WinIcon::from_handle(handle as HICON))
         } else {
             Err(BadIcon::OsError(io::Error::last_os_error()))
@@ -137,7 +139,7 @@ impl WinIcon {
                 LR_DEFAULTSIZE,
             )
         };
-        if handle != 0 {
+        if !handle.is_null() {
             Ok(WinIcon::from_handle(handle as HICON))
         } else {
             Err(BadIcon::OsError(io::Error::last_os_error()))
@@ -151,18 +153,18 @@ impl WinIcon {
 
     pub fn set_for_window(&self, hwnd: HWND, icon_type: IconType) {
         unsafe {
-            SendMessageW(hwnd, WM_SETICON, icon_type as usize, self.as_raw_handle());
+            SendMessageW(hwnd, WM_SETICON, icon_type as usize, self.as_raw_handle() as isize);
         }
     }
 
     fn from_handle(handle: HICON) -> Self {
-        Self { inner: Arc::new(RaiiIcon { handle }) }
+        Self { inner: Arc::new(RaiiIcon { handle: handle as isize }) }
     }
 }
 
 impl Drop for RaiiIcon {
     fn drop(&mut self) {
-        unsafe { DestroyIcon(self.handle) };
+        unsafe { DestroyIcon(self.handle as HICON) };
     }
 }
 
@@ -205,13 +207,13 @@ impl WinCursor {
         let h = image.height as i32;
 
         unsafe {
-            let hdc_screen = GetDC(0);
-            if hdc_screen == 0 {
+            let hdc_screen = GetDC(ptr::null_mut());
+            if hdc_screen.is_null() {
                 return Err(io::Error::last_os_error());
             }
             let hbm_color = CreateCompatibleBitmap(hdc_screen, w, h);
-            ReleaseDC(0, hdc_screen);
-            if hbm_color == 0 {
+            ReleaseDC(ptr::null_mut(), hdc_screen);
+            if hbm_color.is_null() {
                 return Err(io::Error::last_os_error());
             }
             if SetBitmapBits(hbm_color, bgra.len() as u32, bgra.as_ptr() as *const c_void) == 0 {
@@ -222,7 +224,7 @@ impl WinCursor {
             // Mask created according to https://learn.microsoft.com/en-us/windows/win32/api/wingdi/nf-wingdi-createbitmap#parameters
             let mask_bits: Vec<u8> = vec![0xff; ((((w + 15) >> 4) << 1) * h) as usize];
             let hbm_mask = CreateBitmap(w, h, 1, 1, mask_bits.as_ptr() as *const _);
-            if hbm_mask == 0 {
+            if hbm_mask.is_null() {
                 DeleteObject(hbm_color);
                 return Err(io::Error::last_os_error());
             }
@@ -238,28 +240,30 @@ impl WinCursor {
             let handle = CreateIconIndirect(&icon_info as *const _);
             DeleteObject(hbm_color);
             DeleteObject(hbm_mask);
-            if handle == 0 {
+            if handle.is_null() {
                 return Err(io::Error::last_os_error());
             }
 
-            Ok(Self::Cursor(Arc::new(RaiiCursor { handle })))
+            Ok(Self::Cursor(Arc::new(RaiiCursor { handle: handle as isize })))
         }
     }
 }
 
+// The handle is stored as `isize` (the `HCURSOR` representation before windows-sys 0.59), which
+// keeps the type `Send + Sync` and its derived `Debug` output unchanged.
 #[derive(Debug, Hash, Eq, PartialEq)]
 pub struct RaiiCursor {
-    handle: HCURSOR,
+    handle: isize,
 }
 
 impl Drop for RaiiCursor {
     fn drop(&mut self) {
-        unsafe { DestroyCursor(self.handle) };
+        unsafe { DestroyCursor(self.handle as HCURSOR) };
     }
 }
 
 impl RaiiCursor {
     pub fn as_raw_handle(&self) -> HICON {
-        self.handle
+        self.handle as HICON
     }
 }

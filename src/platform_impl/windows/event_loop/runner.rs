@@ -398,7 +398,7 @@ impl<T> BufferedEvent<T> {
                         (*userdata).window_state_lock().window_flags
                     };
 
-                    window_flags.set_size((window_id.0).0, inner_size);
+                    window_flags.set_size(window_id.0.into(), inner_size);
                 }
             },
         }

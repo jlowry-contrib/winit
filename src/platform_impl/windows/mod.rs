@@ -1,6 +1,6 @@
 use smol_str::SmolStr;
 use windows_sys::Win32::Foundation::{HANDLE, HWND};
-use windows_sys::Win32::UI::WindowsAndMessaging::{HMENU, WINDOW_LONG_PTR_INDEX};
+use windows_sys::Win32::UI::WindowsAndMessaging::WINDOW_LONG_PTR_INDEX;
 
 pub(crate) use self::event_loop::{
     ActiveEventLoop, EventLoop, EventLoopProxy, OwnedDisplayHandle,
@@ -23,8 +23,10 @@ use crate::platform::windows::{BackdropType, Color, CornerPreference};
 
 #[derive(Clone, Debug)]
 pub struct PlatformSpecificWindowAttributes {
-    pub owner: Option<HWND>,
-    pub menu: Option<HMENU>,
+    // The public `isize` handle types from `crate::platform::windows`, converted to the
+    // windows-sys pointer types when the window is created.
+    pub owner: Option<crate::platform::windows::HWND>,
+    pub menu: Option<crate::platform::windows::HMENU>,
     pub taskbar_icon: Option<Icon>,
     pub no_redirection_bitmap: bool,
     pub drag_and_drop: bool,
@@ -97,8 +99,10 @@ pub struct KeyEventExtra {
     pub key_without_modifiers: Key,
 }
 
+// The handle is stored as `isize` (the `HWND` representation before windows-sys 0.59) so that the
+// derived `Debug`, `Ord` and `Hash` implementations stay the same.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct WindowId(HWND);
+pub struct WindowId(isize);
 unsafe impl Send for WindowId {}
 unsafe impl Sync for WindowId {}
 
@@ -116,13 +120,13 @@ impl From<WindowId> for u64 {
 
 impl From<WindowId> for HWND {
     fn from(window_id: WindowId) -> Self {
-        window_id.0
+        window_id.0 as HWND
     }
 }
 
 impl From<u64> for WindowId {
     fn from(raw_id: u64) -> Self {
-        Self(raw_id as HWND)
+        Self(raw_id as isize)
     }
 }
 
