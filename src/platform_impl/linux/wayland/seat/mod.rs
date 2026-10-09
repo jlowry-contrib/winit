@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use ahash::AHashMap;
+use foldhash::HashMap;
 use tracing::warn;
 
 use sctk::reexports::client::backend::ObjectId;
@@ -41,7 +41,7 @@ pub struct WinitSeatState {
     touch: Option<WlTouch>,
 
     /// The mapping from touched points to the surfaces they're present.
-    touch_map: AHashMap<i32, TouchPoint>,
+    touch_map: HashMap<i32, TouchPoint>,
 
     /// The text input bound on the seat.
     text_input: Option<Arc<ZwpTextInputV3>>,

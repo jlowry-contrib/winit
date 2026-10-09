@@ -4,7 +4,7 @@ use std::num::NonZeroU32;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
-use ahash::HashSet;
+use foldhash::HashSet;
 use tracing::{info, warn};
 
 use sctk::reexports::client::backend::ObjectId;

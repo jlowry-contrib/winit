@@ -1,5 +1,7 @@
 //! Winit's Wayland backend.
 
+#![allow(clippy::mutable_key_type)]
+
 use std::fmt::Display;
 use std::sync::Arc;
 
